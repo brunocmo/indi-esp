@@ -1,0 +1,3 @@
+[submodule "cosmo-finder"]
+	path = cosmo-finder
+	url = git@github.com:brunocmo/cosmo-finder.git
