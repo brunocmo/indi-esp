@@ -3,6 +3,12 @@
 #include "libindi/defaultdevice.h"
 #include "libindi/indipropertyswitch.h"
 #include "libindi/indipropertytext.h"
+#include "libindi/connectionplugins/connectiontcp.h"
+
+namespace Connection
+{
+    class TCP;
+}
 
 class Esp32Driver : public INDI::DefaultDevice
 {
@@ -23,7 +29,6 @@ public:
 
     virtual bool updateProperties() override;
 
-    
 
 protected:
     virtual bool saveConfigItems(FILE *fp) override;
@@ -32,6 +37,12 @@ private:
     INDI::PropertyText WhatToSayTP {1};
 
     INDI::PropertyNumber SayCountNP {1};
+
+    bool Handshake();
+    bool sendCommand(const char *cmd);
+    int PortFD{-1};
+
+    Connection::TCP *tcpConnection{nullptr};
 
     enum
     {

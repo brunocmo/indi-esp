@@ -67,9 +67,34 @@ bool Esp32Driver::initProperties()
                 0,                  // With no timeout
                 IPS_IDLE);          // and an initial state of idle
 
+    addAuxControls();
+
+    tcpConnection = new Connection::TCP(this);
+    tcpConnection->registerHandshake([&]() {return Handshake();});
+    tcpConnection->setDefaultHost("192.168.0.184");
+    tcpConnection->setDefaultPort(16188);
+    registerConnection(tcpConnection);
+
     return true;
 
 }
+
+bool Esp32Driver::Handshake()
+{
+    if (isSimulation())
+    {
+        LOGF_INFO("Connected successfuly to simulated %s.", getDeviceName());
+        return true;
+    }
+
+    // TODO: Any initial communciation needed with our device; we have an active
+    // connection with a valid file descriptor called PortFD. This file descriptor
+    // can be used with the tty_* functions in indicom.h
+
+    return true;
+}
+
+
 
 bool Esp32Driver::updateProperties()
 {
