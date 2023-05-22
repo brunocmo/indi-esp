@@ -42,11 +42,11 @@ bool Esp32Driver::initProperties()
     // any time. Maybe you don't want it to show until you are connected, or
     // until the user does something else? Maybe you want to connect, query your
     // device, then call this. It's up to you.
-    defineProperty(&SayHelloSP);
+    defineProperty(SayHelloSP);
 
     WhatToSayTP[0].fill("WHAT_TO_SAY", "What to say?", "Hello, world!");
     WhatToSayTP.fill(getDeviceName(), "WHAT_TO_SAY", "Got something to say?", MAIN_CONTROL_TAB, IP_RW, 60, IPS_IDLE);
-    defineProperty(&WhatToSayTP);
+    defineProperty(WhatToSayTP);
 
         // and now let's add a counter of how many times the user clicks the button
     SayCountNP[0].fill(
@@ -104,7 +104,7 @@ bool Esp32Driver::updateProperties()
 
     if (isConnected())
     {
-        defineProperty(&SayCountNP);
+        defineProperty(SayCountNP);
 
     }
     else
@@ -204,7 +204,7 @@ bool Esp32Driver::ISNewText(const char *dev, const char *name, char *texts[], ch
 bool Esp32Driver::saveConfigItems(FILE *fp)
 {
     INDI::DefaultDevice::saveConfigItems(fp);
-    IUSaveConfigText(fp, &WhatToSayTP);
+    IUSaveConfigText(fp, WhatToSayTP);
 
     return true;
 }
