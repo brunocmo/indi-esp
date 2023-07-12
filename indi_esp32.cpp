@@ -36,12 +36,14 @@ bool Esp32Driver::initProperties()
 
     tcpConnection = new Connection::TCP(this);
     tcpConnection->registerHandshake([&]() {return Handshake();});
-    tcpConnection->setDefaultHost("192.168.0.184");
+    tcpConnection->setDefaultHost("192.168.0.224");
     tcpConnection->setDefaultPort(16188);
     registerConnection(tcpConnection);
 
     return true;
 }
+
+
 
 bool Esp32Driver::Handshake()
 {
@@ -99,6 +101,21 @@ bool Esp32Driver::Goto( double ra, double dec )
     fs_sexa(AZStr, AltAz.azimuth, 2, 3600);
 
     LOGF_INFO("Girando para RA: %s == %lf - DEC: %s == %lf ||| ALT: %s = %lf - AZ: %s = %lf", RAStr, ra, DecStr, dec, ALTStr, AltAz.altitude, AZStr, AltAz.azimuth );
+
+    char buffer[255];
+    char* ptrBuffer = buffer;
+    int passoX = 1000;
+    int passoY = 500;
+
+    *ptrBuffer++ = 0x01;
+    memcpy(ptrBuffer, &passoX, sizeof(int));
+    ptrBuffer += sizeof(int);
+    *ptrBuffer++ = ',';
+    memcpy(ptrBuffer, &passoY, sizeof(int));
+    ptrBuffer += sizeof(int);
+    *ptrBuffer++ = '\0';
+
+    sendCommand( buffer );
 
     return true;
 }
@@ -210,6 +227,48 @@ bool Esp32Driver::updateLocation(double latitude, double longitude, double eleva
     UpdateLocation(latitude, longitude, elevation);
     return true;
 }
+
+bool Esp32Driver::sendCommand(const char *cmd)
+{
+    int nbytes_read = 0, nbytes_written = 0, tty_rc = 0;
+    char res[8] = {0};
+    LOGF_DEBUG("CMD <%s>", cmd);
+
+    if (!isSimulation())
+    {
+        tcflush(PortFD, TCIOFLUSH);
+        if ((tty_rc = tty_write_string(PortFD, cmd, &nbytes_written)) != TTY_OK)
+        {
+            char errorMessage[MAXRBUF];
+            tty_error_msg(tty_rc, errorMessage, MAXRBUF);
+            LOGF_ERROR("Serial write error: %s", errorMessage);
+            return false;
+        }
+    }
+
+    if (isSimulation())
+    {
+        strncpy(res, "OK#", 8);
+        nbytes_read = 3;
+    }
+    else
+    {
+        if ((tty_rc = tty_read_section(PortFD, res, '#', 1, &nbytes_read)) != TTY_OK)
+        {
+            char errorMessage[MAXRBUF];
+            tty_error_msg(tty_rc, errorMessage, MAXRBUF);
+            LOGF_ERROR("Serial read error: %s", errorMessage);
+            return false;
+        }
+    }
+
+    res[nbytes_read - 1] = '\0';
+    LOGF_DEBUG("RES <%s>", res);
+
+    return true;
+}
+
+
 
 const char *Esp32Driver::getDefaultName()
 {
