@@ -5,6 +5,8 @@
 #include "libindi/connectionplugins/connectiontcp.h"
 #include "libindi/alignment/AlignmentSubsystemForDrivers.h"
 
+#include <tuple>
+
 namespace Connection
 {
     class TCP;
@@ -28,6 +30,7 @@ protected:
 
     virtual bool ReadScopeStatus() override;
     virtual bool Goto(double, double) override;
+    virtual bool Park() override;
     virtual bool Abort() override;
     bool updateLocation(double latitude, double longitude, double elevation) override;
 
@@ -38,7 +41,8 @@ private:
     double targetDEC{0};
 
     bool sendCommand(const char *cmd);
-    int PortFD{-1};
+
+    std::tuple< int, int > stepsNeededToMove( double, double );
 
     Connection::TCP *tcpConnection{nullptr};
     // Debug channel to write mount logs to
@@ -48,5 +52,5 @@ private:
     uint8_t DBG_SCOPE { INDI::Logger::DBG_IGNORE };
 
     // slew rate, degrees/s
-    static const uint8_t SLEW_RATE = 3;
+    static const uint8_t SLEW_RATE = 10;
 };

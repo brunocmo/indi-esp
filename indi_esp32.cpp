@@ -6,6 +6,10 @@
 
 #include <cmath>
 #include <memory>
+#include <unistd.h>
+#include <termios.h>
+#include <iostream>
+#include <sstream>
 
 // We declare an auto pointer to MyCustomDriver.
 static std::unique_ptr<Esp32Driver> esp32Driver(new Esp32Driver());
@@ -24,7 +28,7 @@ bool Esp32Driver::initProperties()
     INDI::Telescope::initProperties();
 
     // Set telescope capabilities. 0 is for the the number of slew rates that we support. We have none for this simple driver.
-    SetTelescopeCapability(TELESCOPE_CAN_GOTO | TELESCOPE_CAN_ABORT, 0);
+    SetTelescopeCapability(TELESCOPE_CAN_GOTO | TELESCOPE_CAN_PARK | TELESCOPE_CAN_ABORT, 0);
 
     addAuxControls();
 
@@ -33,12 +37,6 @@ bool Esp32Driver::initProperties()
 
     // Force the alignment system to always be on
     getSwitch("ALIGNMENT_SUBSYSTEM_ACTIVE")[0].setState(ISS_ON);
-
-    tcpConnection = new Connection::TCP(this);
-    tcpConnection->registerHandshake([&]() {return Handshake();});
-    tcpConnection->setDefaultHost("192.168.0.224");
-    tcpConnection->setDefaultPort(16188);
-    registerConnection(tcpConnection);
 
     return true;
 }
@@ -58,6 +56,15 @@ bool Esp32Driver::Handshake()
 
         return true;
     }
+    else
+    {
+        bool teste = false;
+        teste = updateLocation( -15.7792, 47.9341, 1056.24 );
+
+        LOGF_INFO("Updated %d", PortFD );
+
+        return true;
+    }
 
     // TODO: Any initial communciation needed with our device; we have an active
     // connection with a valid file descriptor called PortFD. This file descriptor
@@ -70,50 +77,30 @@ bool Esp32Driver::Goto( double ra, double dec )
 {
     targetRA = ra;
     targetDEC = dec;
-    char RAStr[64] = {0}, DecStr[64] = {0};
-    char ALTStr[64] = {0}, AZStr[64] = {0};
 
-    // Parse the RA/DEC into strings
-    fs_sexa(RAStr, targetRA, 2, 3600);
-    fs_sexa(DecStr, targetDEC, 2, 3600);
+    const auto steps = stepsNeededToMove( ra, dec );
+
+    LOGF_INFO("TESTE azimute: %d || altitude: %d ", std::get<0>(steps), std::get<1>(steps) );
 
     // Mark state as slewing
     TrackState = SCOPE_SLEWING;
 
-    LOGF_INFO( "VALOR: %lf, %lf, %lf ", m_Location.latitude, m_Location.longitude, m_Location.elevation );
-
-    INDI::IHorizontalCoordinates AltAz{ 0, 0 };
-    TelescopeDirectionVector TDV;
-
-    bool testekkk = false;
-    testekkk = TransformCelestialToTelescope( ra, dec, 0.0, TDV);
-
-    LOGF_INFO( "show %d", testekkk );
-
-    AltitudeAzimuthFromTelescopeDirectionVector(TDV, AltAz);
-
-    INDI::IEquatorialCoordinates EquatorialCoordinates { 0, 0 };
-    //EquatorialCoordinates.rightascension = ra;
-    //EquatorialCoordinates.declination = dec;
-    //INDI::EquatorialToHorizontal( &EquatorialCoordinates, &m_Location, ln_get_julian_from_sys(), &AltAz);
-
-    fs_sexa(ALTStr, AltAz.altitude, 2, 3600);
-    fs_sexa(AZStr, AltAz.azimuth, 2, 3600);
-
-    LOGF_INFO("Girando para RA: %s == %lf - DEC: %s == %lf ||| ALT: %s = %lf - AZ: %s = %lf", RAStr, ra, DecStr, dec, ALTStr, AltAz.altitude, AZStr, AltAz.azimuth );
-
     char buffer[255];
     char* ptrBuffer = buffer;
-    int passoX = 1000;
-    int passoY = 500;
 
     *ptrBuffer++ = 0x01;
-    memcpy(ptrBuffer, &passoX, sizeof(int));
+    memcpy(ptrBuffer, &std::get<0>(steps), sizeof(int));
     ptrBuffer += sizeof(int);
     *ptrBuffer++ = ',';
-    memcpy(ptrBuffer, &passoY, sizeof(int));
+    memcpy(ptrBuffer, &std::get<1>(steps), sizeof(int));
     ptrBuffer += sizeof(int);
-    *ptrBuffer++ = '\0';
+
+    std::stringstream wow;
+    for( int i{0}; i<20; i++)
+    {
+        wow << std::hex << (int)buffer[i] << " ";
+    }
+    LOGF_INFO( "%s", wow.str().c_str() );
 
     sendCommand( buffer );
 
@@ -122,7 +109,38 @@ bool Esp32Driver::Goto( double ra, double dec )
 
 bool Esp32Driver::Abort()
 {
+    char buffer[3];
+    char* ptrBuffer = buffer;
+
+    *ptrBuffer++ = 0x05;
+    sendCommand( buffer );
+
+    NewRaDec( currentRA, currentDEC );
+
     return true;
+}
+
+bool Esp32Driver::Park()
+{
+
+    char buffer[3];
+    char* ptrBuffer = buffer;
+
+    INDI::IHorizontalCoordinates AltAz{ 180, 0 };
+    INDI::IEquatorialCoordinates EquatorialCoordinates { 0, 0 };
+    INDI::HorizontalToEquatorial(&AltAz, &m_Location, ln_get_julian_from_sys(), &EquatorialCoordinates);
+
+    currentRA = EquatorialCoordinates.rightascension;
+    currentDEC = EquatorialCoordinates.declination;
+
+    *ptrBuffer++ = 0x02;
+    sendCommand( buffer );
+
+    LOGF_INFO("TESTE ra: %f || dec: %f ", currentRA, currentDEC );
+
+    NewRaDec( currentRA, currentDEC );
+
+    return false;
 }
 
 bool Esp32Driver::ReadScopeStatus()
@@ -159,6 +177,7 @@ bool Esp32Driver::ReadScopeStatus()
     switch (TrackState)
     /* condition */{
         case SCOPE_SLEWING:
+        {
             // Wait until we are "locked" into position for both RA & DEC axis
             nlocked = 0;
 
@@ -202,7 +221,34 @@ bool Esp32Driver::ReadScopeStatus()
                 LOG_INFO("Telescope slew is complete. Tracking...");
             }
             break;
+        }
 
+        case SCOPE_TRACKING:
+        {
+            LOG_INFO("ENTREI");
+
+            const auto steps = stepsNeededToMove( currentRA, currentDEC );
+
+            LOGF_INFO("TESTE azimute: %d || altitude: %d ", std::get<0>(steps), std::get<1>(steps) );
+
+            char buffer[255];
+            char* ptrBuffer = buffer;
+
+            *ptrBuffer++ = 0x02;
+            memcpy(ptrBuffer, &std::get<0>(steps), sizeof(int));
+            ptrBuffer += sizeof(int);
+            *ptrBuffer++ = ',';
+            memcpy(ptrBuffer, &std::get<1>(steps), sizeof(int));
+            ptrBuffer += sizeof(int);
+
+            std::stringstream wow;
+            for( int i{0}; i<20; i++)
+            {
+                wow << std::hex << (int)buffer[i] << " ";
+            }
+            LOGF_INFO( "%s", wow.str().c_str() );
+            break;
+        }
         default:
         break;
     } 
@@ -230,18 +276,16 @@ bool Esp32Driver::updateLocation(double latitude, double longitude, double eleva
 
 bool Esp32Driver::sendCommand(const char *cmd)
 {
-    int nbytes_read = 0, nbytes_written = 0, tty_rc = 0;
-    char res[8] = {0};
+    int nbytes_read = 20, nbytes_written = 0, tty_rc = 0;
+    char res[20] = {0};
     LOGF_DEBUG("CMD <%s>", cmd);
 
     if (!isSimulation())
     {
-        tcflush(PortFD, TCIOFLUSH);
-        if ((tty_rc = tty_write_string(PortFD, cmd, &nbytes_written)) != TTY_OK)
+        int n = write( PortFD, cmd, 255 );
+        if ( n == -1 )
         {
-            char errorMessage[MAXRBUF];
-            tty_error_msg(tty_rc, errorMessage, MAXRBUF);
-            LOGF_ERROR("Serial write error: %s", errorMessage);
+            LOGF_ERROR("Write message error", cmd);
             return false;
         }
     }
@@ -253,22 +297,60 @@ bool Esp32Driver::sendCommand(const char *cmd)
     }
     else
     {
-        if ((tty_rc = tty_read_section(PortFD, res, '#', 1, &nbytes_read)) != TTY_OK)
+        int k = read( PortFD, res, 20);
+        if ( k == -1 or k == 0 )
         {
-            char errorMessage[MAXRBUF];
-            tty_error_msg(tty_rc, errorMessage, MAXRBUF);
-            LOGF_ERROR("Serial read error: %s", errorMessage);
+            LOGF_ERROR("Read error", cmd );
             return false;
+        }
+        else
+        {
+            std::stringstream wow;
+            for( int i{0}; i<20; i++)
+            {
+                wow << res[i];
+            }
+            LOGF_DEBUG( "me ajuda %s", wow.str().c_str() );   
         }
     }
 
     res[nbytes_read - 1] = '\0';
-    LOGF_DEBUG("RES <%s>", res);
+    LOGF_DEBUG("RES <%s>", (char *)res);
 
     return true;
 }
 
+std::tuple< int, int > Esp32Driver::stepsNeededToMove( double ra, double dec )
+{
+    double diffAzimute{0};
+    double diffAltitude{0};
 
+    double anglePerStep = 0.00329670329;
+
+    INDI::IHorizontalCoordinates currentAltAz{ 0, 0 };
+    INDI::IHorizontalCoordinates positionAltAz{ 0, 0 };
+
+    TelescopeDirectionVector currentTDV;
+    TelescopeDirectionVector positionTDV;
+
+
+    TransformCelestialToTelescope( currentRA, currentDEC, 0.0, currentTDV);
+    TransformCelestialToTelescope( ra, dec, 0.0, positionTDV);
+
+    AltitudeAzimuthFromTelescopeDirectionVector(currentTDV, currentAltAz);
+    AltitudeAzimuthFromTelescopeDirectionVector(positionTDV, positionAltAz);
+
+    diffAzimute = positionAltAz.azimuth - currentAltAz.azimuth;
+    diffAltitude = positionAltAz.altitude - currentAltAz.altitude;
+
+    diffAzimute /= anglePerStep;
+    diffAltitude /= anglePerStep;
+
+    int stepsAzimute = (int)diffAzimute;
+    int stepsAltitude = (int)diffAltitude * (-1);
+
+    return { stepsAzimute, stepsAltitude };
+}
 
 const char *Esp32Driver::getDefaultName()
 {
