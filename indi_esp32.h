@@ -40,9 +40,14 @@ private:
     double targetRA{0};
     double targetDEC{0};
 
+    INDI::IHorizontalCoordinates trackingAltAz{ 0, 0 };
+
     bool sendCommand(const char *cmd);
 
+    bool isAbort{ false };
+
     std::tuple< int, int > stepsNeededToMove( double, double );
+    std::tuple< int, int > stepsTracking();
 
     Connection::TCP *tcpConnection{nullptr};
     // Debug channel to write mount logs to
@@ -52,5 +57,5 @@ private:
     uint8_t DBG_SCOPE { INDI::Logger::DBG_IGNORE };
 
     // slew rate, degrees/s
-    static const uint8_t SLEW_RATE = 10;
+    static const uint8_t SLEW_RATE = 2;
 };

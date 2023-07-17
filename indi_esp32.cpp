@@ -94,15 +94,18 @@ bool Esp32Driver::Goto( double ra, double dec )
     *ptrBuffer++ = ',';
     memcpy(ptrBuffer, &std::get<1>(steps), sizeof(int));
     ptrBuffer += sizeof(int);
+    *ptrBuffer++ = '\0';
 
-    std::stringstream wow;
-    for( int i{0}; i<20; i++)
-    {
-        wow << std::hex << (int)buffer[i] << " ";
-    }
-    LOGF_INFO( "%s", wow.str().c_str() );
+    // std::stringstream wow;
+    // for( int i{0}; i<20; i++)
+    // {
+    //     wow << std::hex << (int)buffer[i] << " ";
+    // }
+    // LOGF_INFO( "%s", wow.str().c_str() );
 
     sendCommand( buffer );
+
+    isAbort = false;
 
     return true;
 }
@@ -116,6 +119,8 @@ bool Esp32Driver::Abort()
     sendCommand( buffer );
 
     NewRaDec( currentRA, currentDEC );
+
+    isAbort = true;
 
     return true;
 }
@@ -225,28 +230,32 @@ bool Esp32Driver::ReadScopeStatus()
 
         case SCOPE_TRACKING:
         {
-            LOG_INFO("ENTREI");
-
-            const auto steps = stepsNeededToMove( currentRA, currentDEC );
-
-            LOGF_INFO("TESTE azimute: %d || altitude: %d ", std::get<0>(steps), std::get<1>(steps) );
-
-            char buffer[255];
-            char* ptrBuffer = buffer;
-
-            *ptrBuffer++ = 0x02;
-            memcpy(ptrBuffer, &std::get<0>(steps), sizeof(int));
-            ptrBuffer += sizeof(int);
-            *ptrBuffer++ = ',';
-            memcpy(ptrBuffer, &std::get<1>(steps), sizeof(int));
-            ptrBuffer += sizeof(int);
-
-            std::stringstream wow;
-            for( int i{0}; i<20; i++)
+            if( isAbort )
             {
-                wow << std::hex << (int)buffer[i] << " ";
+                break;
             }
-            LOGF_INFO( "%s", wow.str().c_str() );
+            const auto steps = stepsTracking();
+
+            int stepsX = std::get<0>(steps);
+            int stepsY = std::get<1>(steps);
+
+            if( stepsX != 0 || stepsY != 0 )
+            {
+                LOGF_INFO("TESTE azimute: %d || altitude: %d ", stepsX, stepsY);
+                char buffer[255];
+                char* ptrBuffer = buffer;
+
+                *ptrBuffer++ = 0x03;
+                memcpy(ptrBuffer, &stepsX, sizeof(int));
+                ptrBuffer += sizeof(int);
+                *ptrBuffer++ = ',';
+                memcpy(ptrBuffer, &stepsY, sizeof(int));
+                ptrBuffer += sizeof(int);
+                *ptrBuffer++ = '\0';
+
+                sendCommand( buffer );
+            }
+
             break;
         }
         default:
@@ -310,7 +319,6 @@ bool Esp32Driver::sendCommand(const char *cmd)
             {
                 wow << res[i];
             }
-            LOGF_DEBUG( "me ajuda %s", wow.str().c_str() );   
         }
     }
 
@@ -340,6 +348,8 @@ std::tuple< int, int > Esp32Driver::stepsNeededToMove( double ra, double dec )
     AltitudeAzimuthFromTelescopeDirectionVector(currentTDV, currentAltAz);
     AltitudeAzimuthFromTelescopeDirectionVector(positionTDV, positionAltAz);
 
+    trackingAltAz = positionAltAz;
+
     diffAzimute = positionAltAz.azimuth - currentAltAz.azimuth;
     diffAltitude = positionAltAz.altitude - currentAltAz.altitude;
 
@@ -348,6 +358,46 @@ std::tuple< int, int > Esp32Driver::stepsNeededToMove( double ra, double dec )
 
     int stepsAzimute = (int)diffAzimute;
     int stepsAltitude = (int)diffAltitude * (-1);
+
+    return { stepsAzimute, stepsAltitude };
+}
+
+std::tuple< int, int > Esp32Driver::stepsTracking()
+{
+    double diffAzimute{0};
+    double diffAltitude{0};
+
+    double anglePerStep = 0.00329670329;
+
+    INDI::IHorizontalCoordinates currentAltAz{ 0, 0 };
+
+    TelescopeDirectionVector currentTDV;
+
+    TransformCelestialToTelescope( currentRA, currentDEC, 0.0, currentTDV);
+
+    AltitudeAzimuthFromTelescopeDirectionVector(currentTDV, currentAltAz);
+
+    LOGF_INFO("tracking azimute: %lf || altitude: %lf ", trackingAltAz.azimuth, trackingAltAz.altitude );
+    LOGF_INFO("current azimute: %lf || altitude: %lf ", currentAltAz.azimuth, currentAltAz.altitude );
+
+    diffAzimute = currentAltAz.azimuth - trackingAltAz.azimuth;
+    diffAltitude = currentAltAz.altitude - trackingAltAz.altitude;
+
+    diffAzimute /= anglePerStep;
+    diffAltitude /= anglePerStep;
+
+    int stepsAzimute = (int)diffAzimute;
+    int stepsAltitude = (int)diffAltitude * (-1);
+
+    if( stepsAzimute != 0 )
+    {
+        trackingAltAz.azimuth = currentAltAz.azimuth;
+    }
+
+    if( stepsAltitude != 0 )
+    {
+        trackingAltAz.altitude = currentAltAz.altitude;
+    }
 
     return { stepsAzimute, stepsAltitude };
 }
