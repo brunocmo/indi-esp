@@ -57,5 +57,5 @@ private:
     uint8_t DBG_SCOPE { INDI::Logger::DBG_IGNORE };
 
     // slew rate, degrees/s
-    static const uint8_t SLEW_RATE = 2;
+    static const uint8_t SLEW_RATE = 15;
 };

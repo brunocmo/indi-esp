@@ -48,7 +48,7 @@ bool Esp32Driver::Handshake()
     if (isSimulation())
     {
         bool teste = false;
-        teste = updateLocation( -15.7792, 47.9341, 1056.24 );
+        teste = updateLocation( -16.0311796, 48.0307709, 1086.24 );
         
         LOGF_INFO("Updated %d", teste);
 
@@ -59,7 +59,7 @@ bool Esp32Driver::Handshake()
     else
     {
         bool teste = false;
-        teste = updateLocation( -15.7792, 47.9341, 1056.24 );
+        teste = updateLocation( -16.035033, -48.032187, 1056.24 );
 
         LOGF_INFO("Updated %d", PortFD );
 
@@ -131,9 +131,12 @@ bool Esp32Driver::Park()
     char buffer[3];
     char* ptrBuffer = buffer;
 
-    INDI::IHorizontalCoordinates AltAz{ 180, 0 };
+    INDI::IHorizontalCoordinates AltAz{ 179, -1.33 };
     INDI::IEquatorialCoordinates EquatorialCoordinates { 0, 0 };
     INDI::HorizontalToEquatorial(&AltAz, &m_Location, ln_get_julian_from_sys(), &EquatorialCoordinates);
+
+    trackingAltAz = AltAz;
+    TrackState = SCOPE_IDLE;
 
     currentRA = EquatorialCoordinates.rightascension;
     currentDEC = EquatorialCoordinates.declination;
@@ -357,7 +360,7 @@ std::tuple< int, int > Esp32Driver::stepsNeededToMove( double ra, double dec )
     diffAltitude /= anglePerStep;
 
     int stepsAzimute = (int)diffAzimute;
-    int stepsAltitude = (int)diffAltitude * (-1);
+    int stepsAltitude = (int)diffAltitude ;
 
     return { stepsAzimute, stepsAltitude };
 }
@@ -387,7 +390,7 @@ std::tuple< int, int > Esp32Driver::stepsTracking()
     diffAltitude /= anglePerStep;
 
     int stepsAzimute = (int)diffAzimute;
-    int stepsAltitude = (int)diffAltitude * (-1);
+    int stepsAltitude = (int)diffAltitude ;
 
     if( stepsAzimute != 0 )
     {
