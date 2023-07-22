@@ -32,6 +32,8 @@ protected:
     virtual bool Goto(double, double) override;
     virtual bool Park() override;
     virtual bool Abort() override;
+    virtual bool MoveNS( INDI_DIR_NS dir, TelescopeMotionCommand command ) override;
+    virtual bool MoveWE( INDI_DIR_WE dir, TelescopeMotionCommand command ) override;
     bool updateLocation(double latitude, double longitude, double elevation) override;
 
 private:
@@ -39,6 +41,8 @@ private:
     double currentDEC{-89};
     double targetRA{0};
     double targetDEC{0};
+    double azimuthAcc{0.0};
+    double altitudeAcc{0.0};
 
     INDI::IHorizontalCoordinates trackingAltAz{ 0, 0 };
 
