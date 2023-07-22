@@ -42,12 +42,11 @@ bool Esp32Driver::initProperties()
 }
 
 
-
 bool Esp32Driver::Handshake()
 {
+    bool teste = false;
     if (isSimulation())
     {
-        bool teste = false;
         teste = updateLocation( -16.0311796, 48.0307709, 1086.24 );
         
         LOGF_INFO("Updated %d", teste);
@@ -58,7 +57,6 @@ bool Esp32Driver::Handshake()
     }
     else
     {
-        bool teste = false;
         teste = updateLocation( -16.035033, -48.032187, 1056.24 );
 
         LOGF_INFO("Updated %d", PortFD );
@@ -121,6 +119,8 @@ bool Esp32Driver::Abort()
     NewRaDec( currentRA, currentDEC );
 
     isAbort = true;
+    azimuthAcc = 0;
+    altitudeAcc = 0;
 
     return true;
 }
@@ -140,6 +140,9 @@ bool Esp32Driver::Park()
 
     currentRA = EquatorialCoordinates.rightascension;
     currentDEC = EquatorialCoordinates.declination;
+
+    azimuthAcc = 0;
+    altitudeAcc = 0;
 
     *ptrBuffer++ = 0x02;
     sendCommand( buffer );
@@ -255,7 +258,6 @@ bool Esp32Driver::ReadScopeStatus()
                 memcpy(ptrBuffer, &stepsY, sizeof(int));
                 ptrBuffer += sizeof(int);
                 *ptrBuffer++ = '\0';
-
                 sendCommand( buffer );
             }
 
@@ -288,7 +290,7 @@ bool Esp32Driver::updateLocation(double latitude, double longitude, double eleva
 
 bool Esp32Driver::sendCommand(const char *cmd)
 {
-    int nbytes_read = 20, nbytes_written = 0, tty_rc = 0;
+    int nbytes_read = 20;
     char res[20] = {0};
     LOGF_DEBUG("CMD <%s>", cmd);
 
@@ -356,11 +358,11 @@ std::tuple< int, int > Esp32Driver::stepsNeededToMove( double ra, double dec )
     diffAzimute = positionAltAz.azimuth - currentAltAz.azimuth;
     diffAltitude = positionAltAz.altitude - currentAltAz.altitude;
 
-    diffAzimute /= anglePerStep;
-    diffAltitude /= anglePerStep;
-
+    diffAzimute /= anglePerStep;true
     int stepsAzimute = (int)diffAzimute;
+    azimuthAcc = diffAzimute - stepsAzimute;
     int stepsAltitude = (int)diffAltitude ;
+    altitudeAcc = diffAltitude - stepsAltitude;
 
     return { stepsAzimute, stepsAltitude };
 }
@@ -389,8 +391,13 @@ std::tuple< int, int > Esp32Driver::stepsTracking()
     diffAzimute /= anglePerStep;
     diffAltitude /= anglePerStep;
 
+    diffAzimute += azimuthAcc;
+    diffAltitude += altitudeAcc;
+
     int stepsAzimute = (int)diffAzimute;
+    azimuthAcc = diffAzimute - stepsAzimute;
     int stepsAltitude = (int)diffAltitude ;
+    altitudeAcc = diffAltitude - stepsAltitude;
 
     if( stepsAzimute != 0 )
     {
@@ -407,6 +414,67 @@ std::tuple< int, int > Esp32Driver::stepsTracking()
 
 const char *Esp32Driver::getDefaultName()
 {
-
     return "Esp32 Driver";
+}
+
+bool Esp32Driver::MoveNS(INDI_DIR_NS dir, TelescopeMotionCommand command)
+{
+    char buffer[255];
+    char* ptrBuffer = buffer;
+
+    *ptrBuffer++ = 0x01;
+
+    int stepsFixed = 10;
+    int stepsZeroed = 0;
+
+    if( dir == 0 )
+    {
+        stepsFixed = -10;
+    }
+
+    memcpy(ptrBuffer, &stepsZeroed, sizeof(int));
+    ptrBuffer += sizeof(int);
+    *ptrBuffer++ = ',';
+    memcpy(ptrBuffer, &stepsFixed, sizeof(int));
+    ptrBuffer += sizeof(int);
+    *ptrBuffer++ = '\0';
+
+    sendCommand( buffer );
+
+    INDI_UNUSED(command);
+    IUResetSwitch(&MovementNSSP);
+    MovementNSSP.s = IPS_IDLE;
+    IDSetSwitch(&MovementNSSP, nullptr);
+    return false;
+}
+
+bool Esp32Driver::MoveWE(INDI_DIR_WE dir, TelescopeMotionCommand command)
+{
+    char buffer[255];
+    char* ptrBuffer = buffer;
+
+    *ptrBuffer++ = 0x01;
+
+    int stepsFixed = 10;
+    int stepsZeroed = 0;
+
+    if( dir == 0 )
+    {
+        stepsFixed = -10;
+    }
+
+    memcpy(ptrBuffer, &stepsFixed, sizeof(int));
+    ptrBuffer += sizeof(int);
+    *ptrBuffer++ = ',';
+    memcpy(ptrBuffer, &stepsZeroed, sizeof(int));
+    ptrBuffer += sizeof(int);
+    *ptrBuffer++ = '\0';
+
+    sendCommand( buffer );
+
+    INDI_UNUSED(command);
+    IUResetSwitch(&MovementWESP);
+    MovementWESP.s = IPS_IDLE;
+    IDSetSwitch(&MovementWESP, nullptr);
+    return false;
 }
