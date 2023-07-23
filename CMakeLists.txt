@@ -1,6 +1,7 @@
 # define the project name
+cmake_minimum_required(VERSION 3.6)
 project(indi-esp32 C CXX)
-cmake_minimum_required(VERSION 2.8)
+
 
 include(GNUInstallDirs)
 
