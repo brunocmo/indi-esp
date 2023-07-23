@@ -363,9 +363,9 @@ std::tuple< int, int > Esp32Driver::stepsNeededToMove( double ra, double dec )
     diffAltitude /= anglePerStep;
 
     int stepsAzimute = (int)diffAzimute;
-    //azimuthAcc = diffAzimute - stepsAzimute;
+    azimuthAcc = diffAzimute - stepsAzimute;
     int stepsAltitude = (int)diffAltitude ;
-    //altitudeAcc = diffAltitude - stepsAltitude;
+    altitudeAcc = diffAltitude - stepsAltitude;
 
     return { stepsAzimute, stepsAltitude };
 }
@@ -394,13 +394,13 @@ std::tuple< int, int > Esp32Driver::stepsTracking()
     diffAzimute /= anglePerStep;
     diffAltitude /= anglePerStep;
 
-    //diffAzimute += azimuthAcc;
-    //diffAltitude += altitudeAcc;
+    diffAzimute += azimuthAcc;
+    diffAltitude += altitudeAcc;
 
     int stepsAzimute = (int)diffAzimute;
-    //azimuthAcc = diffAzimute - stepsAzimute;
+    azimuthAcc = diffAzimute - stepsAzimute;
     int stepsAltitude = (int)diffAltitude ;
-    //altitudeAcc = diffAltitude - stepsAltitude;
+    altitudeAcc = diffAltitude - stepsAltitude;
 
     if( stepsAzimute != 0 )
     {
@@ -427,12 +427,12 @@ bool Esp32Driver::MoveNS(INDI_DIR_NS dir, TelescopeMotionCommand command)
 
     *ptrBuffer++ = 0x01;
 
-    int stepsFixed = 10;
+    int stepsFixed = 100;
     int stepsZeroed = 0;
 
     if( dir == 1 )
     {
-        stepsFixed = -10;
+        stepsFixed = -100;
     }
 
     memcpy(ptrBuffer, &stepsZeroed, sizeof(int));
@@ -458,12 +458,12 @@ bool Esp32Driver::MoveWE(INDI_DIR_WE dir, TelescopeMotionCommand command)
 
     *ptrBuffer++ = 0x01;
 
-    int stepsFixed = 10;
+    int stepsFixed = 100;
     int stepsZeroed = 0;
 
     if( dir == 0 )
     {
-        stepsFixed = -10;
+        stepsFixed = -100;
     }
 
     memcpy(ptrBuffer, &stepsFixed, sizeof(int));
